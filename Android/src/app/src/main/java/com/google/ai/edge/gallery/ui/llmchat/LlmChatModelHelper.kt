@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
 import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
 import com.google.ai.edge.gallery.data.Accelerator
@@ -55,6 +56,7 @@ import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
+private const val ANDROID_X86_64_ABI = "x86_64"
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
@@ -96,20 +98,33 @@ object LlmChatModelHelper : LlmModelHelper {
         key = ConfigKeys.VISION_ACCELERATOR,
         defaultValue = DEFAULT_VISION_ACCELERATOR.label,
       )
+
+    // LiteRT-LM's non-CPU backends are not reliable in Android x86_64 emulator/Waydroid
+    // environments. In particular, GPU accelerator loading/delegation can fail during engine
+    // initialization and surface as the generic "Failed to create engine: INTERNAL" error.
+    // Keep GPU/NPU available on real ARM Android devices, but use CPU for x86_64.
+    val isAndroidX86_64 = Build.SUPPORTED_ABIS.contains(ANDROID_X86_64_ABI)
+    if (isAndroidX86_64 && accelerator != Accelerator.CPU.label) {
+      Log.w(TAG, "Android x86_64 detected; forcing LiteRT-LM main backend to CPU instead of $accelerator")
+    }
+
+    val effectiveAccelerator = if (isAndroidX86_64) Accelerator.CPU.label else accelerator
+    val effectiveVisionAccelerator = if (isAndroidX86_64) Accelerator.CPU.label else visionAccelerator
+
     val visionBackend =
-      when (visionAccelerator) {
+      when (effectiveVisionAccelerator) {
         Accelerator.CPU.label -> Backend.CPU()
         Accelerator.GPU.label -> Backend.GPU()
         Accelerator.NPU.label ->
           Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
         Accelerator.TPU.label ->
           Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
-        else -> Backend.GPU()
+        else -> Backend.CPU()
       }
     val shouldEnableImage = supportImage
     val shouldEnableAudio = supportAudio
     val preferredBackend =
-      when (accelerator) {
+      when (effectiveAccelerator) {
         Accelerator.CPU.label -> Backend.CPU()
         Accelerator.GPU.label -> Backend.GPU()
         Accelerator.NPU.label ->
@@ -125,8 +140,8 @@ object LlmChatModelHelper : LlmModelHelper {
       EngineConfig(
         modelPath = modelPath,
         backend = preferredBackend,
-        visionBackend = if (shouldEnableImage) visionBackend else null, // must be GPU for Gemma 3n
-        audioBackend = if (shouldEnableAudio) Backend.CPU() else null, // must be CPU for Gemma 3n
+        visionBackend = if (shouldEnableImage) visionBackend else null,
+        audioBackend = if (shouldEnableAudio) Backend.CPU() else null,
         maxNumTokens = maxTokens,
         cacheDir =
           if (modelPath.startsWith("/data/local/tmp"))
@@ -136,7 +151,6 @@ object LlmChatModelHelper : LlmModelHelper {
 
     // Check if the model file supports speculative decoding.
     var supportsSpeculativeDecoding = false
-    // Check if the model file supports speculative decoding.
     try {
       com.google.ai.edge.litertlm.Capabilities(modelPath).use {
         supportsSpeculativeDecoding = it.hasSpeculativeDecodingSupport()
