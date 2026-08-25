@@ -122,7 +122,7 @@ dependencies {
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.ui.test.junit4)
-  androidTestImplementation(libs.androidx.hilt.testing)
+  androidTestImplementation(libs.hilt.android.testing)
   ksp(libs.moshi.kotlin.codegen)
   implementation(libs.mlkit.genai.prompt)
   implementation(libs.mcp.kotlin.sdk)
