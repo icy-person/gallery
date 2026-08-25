@@ -51,33 +51,10 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  // Release builds use one stable signing identity. The private key stays
-  // outside the repository and is supplied by CI through GitHub Secrets.
-  signingConfigs {
-    create("stableRelease") {
-      val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
-      val storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-      val keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-      val keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
-
-      check(!keystorePath.isNullOrBlank()) { "SIGNING_KEYSTORE_PATH is required" }
-      check(!storePassword.isNullOrBlank()) { "SIGNING_STORE_PASSWORD is required" }
-      check(!keyAlias.isNullOrBlank()) { "SIGNING_KEY_ALIAS is required" }
-      check(!keyPassword.isNullOrBlank()) { "SIGNING_KEY_PASSWORD is required" }
-      check(file(keystorePath).isFile) { "Signing keystore not found: $keystorePath" }
-
-      storeFile = file(keystorePath)
-      this.storePassword = storePassword
-      this.keyAlias = keyAlias
-      this.keyPassword = keyPassword
-    }
-  }
-
   buildTypes {
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("stableRelease")
     }
   }
   compileOptions {
